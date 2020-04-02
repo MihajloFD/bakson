@@ -10,10 +10,11 @@ import CardView from './CardView'
 const useStyles = makeStyles(theme => ({
   container: {
     background: '#4CAF50',
-    height: '100vh'
+    minHeight: '100vh'
   },
-  item: {
-    minHeight: 220
+  player: {
+    minHeight: 220,
+    borderLeft: '10px solid #4CAF50'
   },
   root: {
     maxWidth: 138,
@@ -28,6 +29,10 @@ const useStyles = makeStyles(theme => ({
     height: '100%',
     cursor: 'pointer',
     opacity: 0.5
+  },
+  active: {
+    minHeight: 220,
+    borderLeft: '10px solid red'
   }
 }))
 
@@ -52,50 +57,62 @@ const Table = () => {
     return sum
   }
 
+  const selected = tableCards.filter(card => card.selected)
+
   const isMoveValid = ({ value }) => {
-    const selected = tableCards.filter(card => card.selected)
-
-    const sum = count(selected)
-    const valid = sum === value
-
-    console.log(sum, value, valid)
-
-    return valid && selected
+    let moveValid = false
+    const different = selected.filter(item => item.value !== value)
+    const same = selected.filter(item => item.value === value)
+    const selectedSum = count(selected)
+    if (!different.length && same.length) {
+      moveValid = true
+    }
+    if (different.find(item => item.value < value)) {
+      if (count(different) % value === 0) {
+        moveValid = true
+      }
+      const aces = (selected.filter(item => item.value === 11))
+      if (aces.length) {
+        let currentSum = selectedSum
+        aces.forEach(() => {
+          currentSum -= 10
+          if (currentSum % value === 0 && !moveValid) {
+            moveValid = true
+          }
+        })
+      }
+    }
+    return moveValid
   }
 
-  const playerMove = card => () => {
-    if (!isPlayer) return
-
+  const moveCard = (card, player) => () => {
+    if (player && !isPlayer) return
+    if (!player && isPlayer) return
     if (isMoveValid(card)) {
-      dispatch(setPlayerCount([...palyerCount, ...isMoveValid(card), card]))
-      dispatch(setTableCards(tableCards.filter(a => !isMoveValid(card).find(b => b.code === a.code))))
+      if (isPlayer) {
+        dispatch(setPlayerCount([...palyerCount, ...selected, card]))
+      } else {
+        dispatch(setAppCount([...appCount, ...selected, card]))
+      }
+      dispatch(setTableCards(tableCards.filter(item => !item.selected)))
     } else {
-      dispatch(setTableCards([...tableCards, card]))
+      dispatch(setTableCards([...tableCards, card].map(item => item.selected ? { ...item, selected: false } : item)))
     }
-    dispatch(setPlayerCards(playerCards.filter(item => item.code !== card.code)))
-    dispatch(setPlayer(false))
+    if (isPlayer) {
+      dispatch(setPlayerCards(playerCards.filter(item => item.code !== card.code)))
+      dispatch(setPlayer(false))
+    } else {
+      if (appCards.length === 1 && remaining) {
+        dispatch(drawCards(deck.deck_id, 12))
+      }
+      dispatch(setAppCards(appCards.filter(item => item.code !== card.code)))
+      dispatch(setPlayer(true))
+    }
   }
 
-  const appMove = card => () => {
-    if (isPlayer) return
-
-    if (isMoveValid(card)) {
-      dispatch(setAppCount([...appCount, ...isMoveValid(card), card]))
-      dispatch(setTableCards(tableCards.filter(a => !isMoveValid(card).find(b => b.code === a.code))))
-    } else {
-      dispatch(setTableCards([...tableCards, card]))
-    }
-
-    if (appCards.length === 1 && remaining) {
-      dispatch(drawCards(deck.deck_id, 12))
-    }
-    dispatch(setAppCards(appCards.filter(item => item.code !== card.code)))
-    dispatch(setPlayer(true))
-  }
-
-  const renderCards = (cards, action) => {
+  const renderCards = (cards, action, player) => {
     return cards.map(card => {
-      const cardProps = { card, action, classes }
+      const cardProps = { card, action, classes, player }
       return (
         <CardView key={card.code} {...cardProps} />
       )
@@ -104,14 +121,14 @@ const Table = () => {
 
   return (
     <Grid className={classes.container}>
-      <Grid className={classes.item} justify="center" container>
-        {renderCards(playerCards, playerMove)}
+      <Grid className={isPlayer ? classes.active : classes.player} justify="center" container>
+        {renderCards(playerCards, moveCard, true)}
       </Grid>
-      <Grid className={classes.item} justify="center" container>
+      <Grid className={classes.player} justify="center" container>
         {renderCards(tableCards, handleSelecTableCard)}
       </Grid>
-      <Grid className={classes.item} justify="center" container>
-        {renderCards(appCards, appMove)}
+      <Grid className={!isPlayer ? classes.active : classes.player} justify="center" container>
+        {renderCards(appCards, moveCard)}
       </Grid>
     </Grid>
   )
